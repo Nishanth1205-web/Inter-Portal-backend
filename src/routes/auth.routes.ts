@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
-import { authenticate } from '../middleware';
+import { authenticate, authorize } from '../middleware';
 import { validate } from '../middleware';
 import { loginSchema, refreshTokenSchema, forgotPasswordSchema, resetPasswordSchema, registerStudentSchema } from '../validators/auth.validator';
 
@@ -13,5 +13,6 @@ router.post('/refresh', validate(refreshTokenSchema), (req, res, next) => authCo
 router.post('/forgot-password', validate(forgotPasswordSchema), (req, res, next) => authController.forgotPassword(req, res, next));
 router.post('/reset-password', validate(resetPasswordSchema), (req, res, next) => authController.resetPassword(req, res, next));
 router.get('/profile', authenticate, (req, res, next) => authController.getProfile(req, res, next));
+router.post('/impersonate', authenticate, authorize('SUPER_ADMIN'), (req, res, next) => authController.impersonate(req, res, next));
 
 export default router;

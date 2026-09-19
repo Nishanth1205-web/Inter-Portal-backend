@@ -63,6 +63,16 @@ export class AuthController {
     }
   }
 
+  async impersonate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { role } = req.body;
+      const result = await authService.impersonate(role, req.user!.id, req.ip, req.headers['user-agent']);
+      sendSuccess(res, result, `Impersonated ${role} successfully`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async registerStudent(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await authService.registerStudent(req.body, req.ip, req.headers['user-agent']);

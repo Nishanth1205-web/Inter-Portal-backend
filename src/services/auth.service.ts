@@ -231,6 +231,39 @@ export class AuthService {
     return user;
   }
 
+  async impersonate(targetRole: string, impersonatorId: string, ipAddress?: string, userAgent?: string) {
+    const user = await prisma.user.findFirst({
+      where: { 
+        role: targetRole,
+        isActive: true 
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    
+    if (!user) {
+      throw new NotFoundError(`No active user found with role ${targetRole}`);
+    }
+
+    const accessToken = this.generateAccessToken(user);
+    const refreshToken = await this.generateRefreshToken(user.id);
+
+    await createAuditLog(impersonatorId, 'IMPERSONATE', 'User', user.id, undefined, ipAddress, userAgent);
+    logger.info(`Super Admin impersonated user: ${user.email}`);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        avatar: user.avatar,
+      },
+      accessToken,
+      refreshToken,
+    };
+  }
+
   private generateAccessToken(user: any): string {
     return jwt.sign(
       {
