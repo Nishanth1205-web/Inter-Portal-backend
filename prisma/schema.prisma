@@ -1,0 +1,487 @@
+// ============================================
+// INTER Portal - Prisma Database Schema (SQLite)
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH & USER MODELS
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          String    @default("STUDENT") // SUPER_ADMIN | ADMIN | STUDENT
+  isActive      Boolean   @default(true)
+  avatar        String?
+  phone         String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  student          Student?
+  admin            Admin?
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  createdQuestions Question[]         @relation("QuestionCreator")
+  createdTests     Test[]             @relation("TestCreator")
+  createdMaterials LearningMaterial[] @relation("MaterialCreator")
+  evaluations      TestResult[]       @relation("Evaluator")
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Admin {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("admins")
+}
+
+model Student {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentNo  String   @unique
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id])
+  batchId       String
+  batch         Batch    @relation(fields: [batchId], references: [id])
+  semester      Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  testAssignments     TestAssignment[]
+  materialAssignments MaterialAssignment[]
+
+  @@index([departmentId])
+  @@index([batchId])
+  @@index([enrollmentNo])
+  @@map("students")
+}
+
+// ============================================
+// ORGANIZATION MODELS
+// ============================================
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students Student[]
+
+  @@map("departments")
+}
+
+model Batch {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  year        Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students Student[]
+
+  @@map("batches")
+}
+
+// ============================================
+// ACADEMIC MODELS
+// ============================================
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skills    Skill[]
+  questions Question[]
+  tests     Test[]
+  materials LearningMaterial[]
+
+  @@map("subjects")
+}
+
+model Skill {
+  id          String   @id @default(uuid())
+  name        String
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topics    Topic[]
+  questions Question[]
+  tests     Test[]
+  materials LearningMaterial[]
+
+  @@unique([name, subjectId])
+  @@index([subjectId])
+  @@map("skills")
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  name        String
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions Question[]
+  tests     Test[]
+  materials LearningMaterial[]
+
+  @@unique([name, skillId])
+  @@index([skillId])
+  @@map("topics")
+}
+
+// ============================================
+// QUESTION MODELS
+// ============================================
+
+model Question {
+  id            String       @id @default(uuid())
+  questionText  String
+  questionType  String       // MCQ | TRUE_FALSE | FILL_BLANK | SHORT_ANSWER | PROGRAMMING | DESCRIPTIVE
+  difficulty    String       // EASY | MEDIUM | HARD
+  marks         Float        @default(1)
+  timeInSeconds Int?
+  explanation   String?
+  correctAnswer String?
+  subjectId     String
+  subject       Subject      @relation(fields: [subjectId], references: [id])
+  skillId       String?
+  skill         Skill?       @relation(fields: [skillId], references: [id])
+  topicId       String?
+  topic         Topic?       @relation(fields: [topicId], references: [id])
+  createdById   String
+  createdBy     User         @relation("QuestionCreator", fields: [createdById], references: [id])
+  isAIGenerated Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  options       QuestionOption[]
+  testQuestions TestQuestion[]
+  studentAnswers StudentAnswer[]
+
+  @@index([subjectId])
+  @@index([skillId])
+  @@index([topicId])
+  @@index([questionType])
+  @@index([difficulty])
+  @@index([createdById])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id          String   @id @default(uuid())
+  questionId  String
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionText  String
+  isCorrect   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([questionId])
+  @@map("question_options")
+}
+
+// ============================================
+// TEST MODELS
+// ============================================
+
+model Test {
+  id            String     @id @default(uuid())
+  title         String
+  description   String?
+  instructions  String?
+  subjectId     String
+  subject       Subject    @relation(fields: [subjectId], references: [id])
+  skillId       String?
+  skill         Skill?     @relation(fields: [skillId], references: [id])
+  topicId       String?
+  topic         Topic?     @relation(fields: [topicId], references: [id])
+  totalMarks    Float      @default(0)
+  duration      Int        // in minutes
+  startDate     DateTime?
+  endDate       DateTime?
+  maxAttempts   Int        @default(1)
+  status        String     @default("DRAFT") // DRAFT | PUBLISHED | ASSIGNED | STARTED | SUBMITTED | EVALUATED | COMPLETED | EXPIRED
+  passingScore  Float?
+  shuffleQuestions Boolean @default(false)
+  showResult    Boolean    @default(true)
+  createdById   String
+  createdBy     User       @relation("TestCreator", fields: [createdById], references: [id])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  testQuestions  TestQuestion[]
+  assignments    TestAssignment[]
+
+  @@index([subjectId])
+  @@index([status])
+  @@index([createdById])
+  @@map("tests")
+}
+
+model TestQuestion {
+  id         String   @id @default(uuid())
+  testId     String
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  sortOrder  Int      @default(0)
+  marks      Float?
+  createdAt  DateTime @default(now())
+
+  @@unique([testId, questionId])
+  @@index([testId])
+  @@index([questionId])
+  @@map("test_questions")
+}
+
+// ============================================
+// ASSIGNMENT & SUBMISSION MODELS
+// ============================================
+
+model TestAssignment {
+  id              String           @id @default(uuid())
+  testId          String
+  test            Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student          @relation(fields: [studentId], references: [id])
+  assignedAt      DateTime         @default(now())
+  startDate       DateTime?
+  endDate         DateTime?
+  status          String           @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | SUBMITTED | EVALUATED
+  attemptCount    Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  submissions TestSubmission[]
+
+  @@unique([testId, studentId])
+  @@index([testId])
+  @@index([studentId])
+  @@index([status])
+  @@map("test_assignments")
+}
+
+model TestSubmission {
+  id              String           @id @default(uuid())
+  assignmentId    String
+  assignment      TestAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  attemptNumber   Int              @default(1)
+  startedAt       DateTime         @default(now())
+  submittedAt     DateTime?
+  lastActivityAt  DateTime         @default(now())
+  timeSpent       Int?             // seconds
+  status          String           @default("IN_PROGRESS") // NOT_STARTED | IN_PROGRESS | SUBMITTED | EVALUATED
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  answers StudentAnswer[]
+  result  TestResult?
+
+  @@index([assignmentId])
+  @@index([status])
+  @@map("test_submissions")
+}
+
+model StudentAnswer {
+  id            String         @id @default(uuid())
+  submissionId  String
+  submission    TestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question       @relation(fields: [questionId], references: [id])
+  answer        String?
+  selectedOptionId String?
+  isCorrect     Boolean?
+  marksObtained Float?
+  isMarkedForReview Boolean    @default(false)
+  answeredAt    DateTime?
+  timeSpent     Int?           // seconds
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([submissionId, questionId])
+  @@index([submissionId])
+  @@index([questionId])
+  @@map("student_answers")
+}
+
+model TestResult {
+  id              String         @id @default(uuid())
+  submissionId    String         @unique
+  submission      TestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  totalMarks      Float
+  obtainedMarks   Float
+  percentage      Float
+  isPassed        Boolean?
+  evaluatedById   String?
+  evaluatedBy     User?          @relation("Evaluator", fields: [evaluatedById], references: [id])
+  feedback        String?
+  evaluatedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([submissionId])
+  @@map("test_results")
+}
+
+// ============================================
+// LEARNING MATERIAL MODELS
+// ============================================
+
+model LearningMaterial {
+  id            String       @id @default(uuid())
+  title         String
+  description   String?
+  type          String       // PPT | VIDEO | IMAGE | DOCUMENT | OTHER
+  subjectId     String
+  subject       Subject      @relation(fields: [subjectId], references: [id])
+  skillId       String?
+  skill         Skill?       @relation(fields: [skillId], references: [id])
+  topicId       String?
+  topic         Topic?       @relation(fields: [topicId], references: [id])
+  content       String?      // generated text content / notes
+  fileUrl       String?      // file path or URL
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
+  metadata      String?      // JSON stringified metadata (slides, scenes, etc.)
+  isAIGenerated Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  createdById   String
+  createdBy     User         @relation("MaterialCreator", fields: [createdById], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  assignments MaterialAssignment[]
+
+  @@index([subjectId])
+  @@index([type])
+  @@index([createdById])
+  @@map("learning_materials")
+}
+
+model MaterialAssignment {
+  id          String           @id @default(uuid())
+  materialId  String
+  material    LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student          @relation(fields: [studentId], references: [id])
+  assignedAt  DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  activities LearningActivity[]
+
+  @@unique([materialId, studentId])
+  @@index([materialId])
+  @@index([studentId])
+  @@map("material_assignments")
+}
+
+model LearningActivity {
+  id              String             @id @default(uuid())
+  assignmentId    String
+  assignment      MaterialAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  accessedAt      DateTime           @default(now())
+  timeSpent       Int?               // seconds
+  isCompleted     Boolean            @default(false)
+  completedAt     DateTime?
+  progress        Float              @default(0) // 0-100 percentage
+  createdAt       DateTime           @default(now())
+
+  @@index([assignmentId])
+  @@map("learning_activities")
+}
+
+// ============================================
+// SYSTEM MODELS
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  details     String?  // JSON stringified
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO | SUCCESS | WARNING | ERROR
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
